@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { GeminiService } from './services/gemini.service';
 import { Materijal } from './materijal.interface';
+import { LaborCost } from './labor-cost.interface';
 
 @Component({
   selector: 'app-root',
@@ -25,12 +26,26 @@ export class AppComponent {
   loadingAnalysis = signal(false);
   errorAnalysis = signal<string | null>(null);
 
+  // State for Labor Costs
+  laborCosts = signal<LaborCost[]>([]);
+  loadingLaborCosts = signal(false);
+  errorLaborCosts = signal<string | null>(null);
+
   totalCost = computed(() => {
     return this.materialsList().reduce((acc, item) => {
       const itemTotal = item.quantity * item.estimatedPricePerUnit;
       return acc + itemTotal;
     }, 0);
   });
+
+  totalLaborCost = computed(() => {
+    return this.laborCosts().reduce((acc, item) => {
+      const itemTotal = item.kolicina * item.cijena_po_jedinici;
+      return acc + itemTotal;
+    }, 0);
+  });
+  
+  grandTotal = computed(() => this.totalCost() + this.totalLaborCost());
 
   async generateList(): Promise<void> {
     if (!this.userInput().trim()) {
@@ -77,6 +92,30 @@ export class AppComponent {
       }
     } finally {
       this.loadingAnalysis.set(false);
+    }
+  }
+
+  async generateLaborCosts(): Promise<void> {
+    if (!this.userInput().trim()) {
+      this.errorLaborCosts.set('Molimo unesite opis projekta.');
+      return;
+    }
+
+    this.loadingLaborCosts.set(true);
+    this.laborCosts.set([]);
+    this.errorLaborCosts.set(null);
+
+    try {
+      const result = await this.geminiService.generateLaborCosts(this.userInput());
+      this.laborCosts.set(result);
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        this.errorLaborCosts.set(e.message);
+      } else {
+        this.errorLaborCosts.set('Došlo je do nepoznate greške.');
+      }
+    } finally {
+      this.loadingLaborCosts.set(false);
     }
   }
 

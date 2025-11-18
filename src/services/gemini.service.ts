@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Materijal } from '../materijal.interface';
+import { LaborCost } from '../labor-cost.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -107,6 +108,68 @@ export class GeminiService {
         throw new Error('Došlo je do problema s autorizacijom. Provjerite vaš API ključ.');
       }
       throw new Error('Nije moguće generirati analizu projekta. Molimo pokušajte ponovo.');
+    }
+  }
+
+  async generateLaborCosts(description: string): Promise<LaborCost[]> {
+    const model = 'gemini-2.5-flash';
+    const systemInstruction = `Ti si stručnjak za kalkulacije u građevinarstvu i tvoja je uloga generirati strukturirani popis troškova radova u JSON formatu na temelju zahtjeva korisnika. Koristi isključivo hrvatski jezik. Procijeni količine i cijene radova realistično za tipičan projekt renovacije na području Hrvatske i Europe. Cijene moraju biti u EUR. Uključi sve ključne faze radova, od rušenja do završnih radova.`;
+    const userPrompt = `Generiraj detaljan popis troškova radova za renoviranje stana opisanog kao: ${description}. Budi precizan u procjeni količine i cijene.`;
+    
+    const schema = {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          stavka: {
+            type: Type.STRING,
+            description: 'Naziv stavke radova (npr. Rušenje pregradnog zida).',
+          },
+          opis: {
+            type: Type.STRING,
+            description: 'Kratak opis što stavka uključuje.',
+          },
+          kolicina: {
+            type: Type.NUMBER,
+            description: 'Procijenjena količina radova.',
+          },
+          jedinica: {
+            type: Type.STRING,
+            description: 'Mjerna jedinica (npr. m², m, kom, sat, paušal).',
+          },
+          cijena_po_jedinici: {
+            type: Type.NUMBER,
+            description: 'Procijenjena cijena po mjernoj jedinici u EUR.',
+          },
+        },
+        required: ['stavka', 'opis', 'kolicina', 'jedinica', 'cijena_po_jedinici'],
+      },
+    };
+
+    try {
+      const response: GenerateContentResponse = await this.ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+          temperature: 0.5,
+        },
+      });
+
+      const jsonText = response.text.trim();
+      const sanitizedJsonText = jsonText.replace(/^```json\s*|```$/g, '');
+      const parsedResponse: LaborCost[] = JSON.parse(sanitizedJsonText);
+      
+      return parsedResponse;
+
+    } catch (error) {
+      console.error('Error generating labor costs:', error);
+      if (error instanceof Error && error.message.includes("API_KEY")) {
+        throw new Error('Došlo je do problema s autorizacijom. Provjerite vaš API ključ.');
+      }
+      throw new Error('Nije moguće generirati troškove radova. Molimo pokušajte ponovo.');
     }
   }
 }
