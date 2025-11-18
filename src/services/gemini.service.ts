@@ -21,10 +21,29 @@ export class GeminiService {
     this.ai = new GoogleGenAI({ apiKey });
   }
 
-  async generateBillOfMaterials(description: string): Promise<Materijal[]> {
+  async generateBillOfMaterials(description: string, analysis: string, laborCosts: LaborCost[]): Promise<Materijal[]> {
     const model = 'gemini-2.5-flash';
     const systemInstruction = `Ti si stručnjak za renoviranje i tvoja je uloga generirati strukturirani popis materijala i procijenjene troškove u JSON formatu na temelju zahtjeva korisnika. Koristi isključivo hrvatski jezik. Moraju biti uključeni materijali za podove, zidove, boju, rasvjetu i vodovodne instalacije. Količine i cijene moraju biti realistične za tipičan projekt renovacije na području Hrvatske i Europe. Cijene moraju biti u EUR.`;
-    const userPrompt = `Generiraj detaljan popis materijala za renoviranje stana opisanog kao: ${description}. Budi precizan u procjeni količine i cijene.`;
+    
+    const laborCostsSummary = JSON.stringify(laborCosts, null, 2);
+    const userPrompt = `
+      Na temelju opisa projekta, detaljne analize i popisa radova, generiraj detaljan popis potrebnog materijala. Popis materijala mora biti usklađen s planiranim radovima.
+
+      **1. Početni Opis Projekta:**
+      ${description}
+
+      **2. Detaljna Analiza Projekta:**
+      \`\`\`
+      ${analysis}
+      \`\`\`
+
+      **3. Popis Planiranih Radova:**
+      \`\`\`json
+      ${laborCostsSummary}
+      \`\`\`
+      
+      Budi precizan u procjeni količine i cijene materijala.
+    `;
     
     const schema = {
       type: Type.ARRAY,
@@ -111,10 +130,23 @@ export class GeminiService {
     }
   }
 
-  async generateLaborCosts(description: string): Promise<LaborCost[]> {
+  async generateLaborCosts(description: string, analysis: string): Promise<LaborCost[]> {
     const model = 'gemini-2.5-flash';
     const systemInstruction = `Ti si stručnjak za kalkulacije u građevinarstvu i tvoja je uloga generirati strukturirani popis troškova radova u JSON formatu na temelju zahtjeva korisnika. Koristi isključivo hrvatski jezik. Procijeni količine i cijene radova realistično za tipičan projekt renovacije na području Hrvatske i Europe. Cijene moraju biti u EUR. Uključi sve ključne faze radova, od rušenja do završnih radova.`;
-    const userPrompt = `Generiraj detaljan popis troškova radova za renoviranje stana opisanog kao: ${description}. Budi precizan u procjeni količine i cijene.`;
+    
+    const userPrompt = `
+      Na temelju početnog opisa projekta i detaljne analize, generiraj detaljan popis troškova radova.
+
+      **1. Početni Opis Projekta:**
+      ${description}
+
+      **2. Detaljna Analiza Projekta:**
+      \`\`\`
+      ${analysis}
+      \`\`\`
+
+      Budi precizan u procjeni količine i cijene radova.
+    `;
     
     const schema = {
       type: Type.ARRAY,
@@ -170,6 +202,67 @@ export class GeminiService {
         throw new Error('Došlo je do problema s autorizacijom. Provjerite vaš API ključ.');
       }
       throw new Error('Nije moguće generirati troškove radova. Molimo pokušajte ponovo.');
+    }
+  }
+
+  async generateOperationalSummary(
+    analysis: string,
+    materials: Materijal[],
+    laborCosts: LaborCost[],
+    grandTotal: number
+  ): Promise<string> {
+    const model = 'gemini-2.5-flash';
+    const systemInstruction = `Ti si viši voditelj projekata s desetljećima iskustva u renovacijama. Tvoj zadatak je napisati sažet i djelotvoran "Operativni sažetak" na temelju podataka koji su ti dostavljeni. Sažetak mora biti na hrvatskom jeziku, profesionalan i direktan. Fokusiraj se na ključne zaključke, financijske naglaske, potencijalne rizike i preporučene sljedeće korake. Formatiraj odgovor koristeći Markdown.`;
+    
+    const materialsSummary = JSON.stringify(materials, null, 2);
+    const laborCostsSummary = JSON.stringify(laborCosts, null, 2);
+
+    const userPrompt = `
+      Na temelju sljedećih detaljnih podataka o projektu renovacije, kreiraj Operativni sažetak.
+
+      1.  **Detaljna Analiza Projekta:**
+          \`\`\`
+          ${analysis}
+          \`\`\`
+
+      2.  **Popis Materijala:**
+          \`\`\`json
+          ${materialsSummary}
+          \`\`\`
+      
+      3.  **Troškovi Radova:**
+          \`\`\`json
+          ${laborCostsSummary}
+          \`\`\`
+
+      4.  **Ukupna Procijenjena Vrijednost Projekta:** ${grandTotal.toFixed(2)} EUR
+
+      Tvoj sažetak treba jasno istaknuti:
+      - Glavni cilj i opseg projekta.
+      - Ključne financijske točke (ukupni trošak, raspodjela između materijala i radova).
+      - Identificirane potencijalne rizike ili područja na koja treba obratiti posebnu pažnju.
+      - Konkretne preporuke za sljedeće korake (npr. prikupljanje ponuda, izrada terminskog plana, provjera dozvola).
+    `;
+
+    try {
+      const response: GenerateContentResponse = await this.ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: 'text/plain',
+          temperature: 0.3,
+        },
+      });
+
+      return response.text.trim();
+
+    } catch (error) {
+      console.error('Error generating operational summary:', error);
+      if (error instanceof Error && error.message.includes("API_KEY")) {
+        throw new Error('Došlo je do problema s autorizacijom. Provjerite vaš API ključ.');
+      }
+      throw new Error('Nije moguće generirati operativni sažetak. Molimo pokušajte ponovo.');
     }
   }
 }
