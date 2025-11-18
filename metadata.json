@@ -1,0 +1,5 @@
+{
+  "name": "Generator Popisa Materijala",
+  "description": "Aplikacija koja koristi Gemini AI za generiranje detaljnog popisa materijala i troškova za projekte renovacije stanova. Unesite opis vašeg projekta i dobijte strukturiranu listu u JSON formatu.",
+  "requestFramePermissions": []
+}
